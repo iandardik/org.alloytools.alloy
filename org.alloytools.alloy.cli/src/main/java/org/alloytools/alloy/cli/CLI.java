@@ -42,6 +42,7 @@ import edu.mit.csail.sdg.alloy4.SafeList;
 import edu.mit.csail.sdg.ast.Func;
 import edu.mit.csail.sdg.translator.A4Tuple;
 import edu.mit.csail.sdg.translator.A4TupleSet;
+import java.util.*;
 
 /**
  * 
@@ -53,6 +54,19 @@ public class CLI extends Env {
     private static void myAssert(boolean cond, String msg) {
         if (!cond) {
             throw new RuntimeException(msg);
+        }
+    }
+
+    private static class Instance implements Comparable<Instance> {
+        public A4Solution sol;
+        public int score;
+        public Instance(A4Solution s, int c) {
+            this.sol = s;
+            this.score = c;
+        }
+        @Override
+        public int compareTo(Instance other) {
+            return this.score - other.score;
         }
     }
 
@@ -195,15 +209,18 @@ public class CLI extends Env {
 			info.durationInMs = TimeUnit.NANOSECONDS.toMillis(finish - start);
 			answers.put(info, s);
 
-            ArrayList<A4Solution> instances = new ArrayList<A4Solution>();
+            ArrayList<A4Solution> solutions = new ArrayList<A4Solution>();
             A4Solution it = s;
             while (it.satisfiable()) {
-                instances.add(it);
+                solutions.add(it);
                 it = it.next();
             }
 
-            for (A4Solution sol : instances) {
-                //System.out.println(sol);
+            final int numInstances = solutions.size();
+            Instance[] instances = new Instance[numInstances];
+            for (int i = 0; i < numInstances; ++i) {
+                final A4Solution sol = solutions.get(i);
+
                 Object obj = sol.eval(orderByFunc.getBody());
                 A4TupleSet tupSet = (A4TupleSet) obj;
 
@@ -212,10 +229,16 @@ public class CLI extends Env {
                 final A4Tuple tup = tupSet.iterator().next();
                 final String strScore = tup.atom(0);
                 final int orderScore = Integer.parseInt(strScore);
-                System.out.println(orderScore);
+
+                Instance inst = new Instance(sol, orderScore);
+                instances[i] = inst;
             }
-            final int numInstances = instances.size();
-            System.out.println("Found " + numInstances + " instances");
+
+            Arrays.sort(instances);
+            for (int i = 0; i < numInstances; ++i) {
+                final Instance inst = instances[i];
+                System.out.println(inst.score);
+            }
 		}
 
         /*
