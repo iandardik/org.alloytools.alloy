@@ -159,8 +159,8 @@ public class CLI extends Env {
 				continue;
 			}
 
-			if (!options.quiet())
-				stdout.println("solving command " + c);
+			//if (!options.quiet())
+				//stdout.println("solving command " + c);
 
 			long start = System.nanoTime();
 			A4Solution s = TranslateAlloyToKodkod.execute_commandFromBook(rep, world.getAllReachableSigs(), c,
@@ -172,7 +172,21 @@ public class CLI extends Env {
 			info.durationInMs = TimeUnit.NANOSECONDS.toMillis(finish - start);
 			answers.put(info, s);
 
+            ArrayList<A4Solution> instances = new ArrayList<A4Solution>();
+            A4Solution it = s;
+            while (it.satisfiable()) {
+                instances.add(it);
+                it = it.next();
+            }
+
+            for (A4Solution sol : instances) {
+                //System.out.println(sol);
+            }
+            final int numInstances = instances.size();
+            System.out.println("Found " + numInstances + " instances");
 		}
+
+        /*
 		if (!options.quiet() && answers.isEmpty()) {
 			stdout.println("no commands found " + cmd);
 		}
@@ -182,6 +196,7 @@ public class CLI extends Env {
 		if (options.evaluator() && !answers.isEmpty()) {
 			evaluator(world, answers);
 		}
+        */
 	}
 
 	private void evaluator(CompModule world, Map<CommandInfo, A4Solution> answers) throws Exception {
