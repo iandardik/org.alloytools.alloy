@@ -3,10 +3,11 @@ sig Node {
 }
 
 fun orderBy : Int {
-    sub[0, #adj]
+    sub[mul[10,#Node], #adj]
+    //sub[#Node, #adj]
 }
 
 run Connected {
     all n: Node | Node in n.*adj
-} for exactly 3 Node, 6 int //, orderBy sub[0, #adj]
+} for 3 Node, 6 int // orderBy 10*#Node - #adj
 
