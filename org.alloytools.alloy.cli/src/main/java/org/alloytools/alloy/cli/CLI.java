@@ -38,6 +38,11 @@ import edu.mit.csail.sdg.translator.A4Solution;
 import edu.mit.csail.sdg.translator.A4SolutionWriter;
 import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
 
+import edu.mit.csail.sdg.alloy4.SafeList;
+import edu.mit.csail.sdg.ast.Func;
+import edu.mit.csail.sdg.translator.A4Tuple;
+import edu.mit.csail.sdg.translator.A4TupleSet;
+
 /**
  * 
  * @author aqute
@@ -45,6 +50,12 @@ import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
  */
 @AlloyMain
 public class CLI extends Env {
+    private static void myAssert(boolean cond, String msg) {
+        if (!cond) {
+            throw new RuntimeException(msg);
+        }
+    }
+
 	final A4Options options = new A4Options();
 
 	public enum OutputType {
@@ -152,6 +163,18 @@ public class CLI extends Env {
 			return;
 		}
 
+        SafeList<Func> funcs = world.getAllFunc();
+        Func orderByFunc = null;
+        for (Func f : funcs) {
+            final String label = f.toString();
+            if (label.contains("orderBy")) {
+                orderByFunc = f;
+                break;
+            }
+        }
+        myAssert(orderByFunc != null, "No orderBy function provided in the spec");
+        System.out.println("using for orderByFun: " + orderByFunc);
+
 		Map<CommandInfo, A4Solution> answers = new TreeMap<>();
 		for (Command c : commands) {
 			if (!run.test(c)) {
@@ -163,7 +186,7 @@ public class CLI extends Env {
 				//stdout.println("solving command " + c);
 
 			long start = System.nanoTime();
-			A4Solution s = TranslateAlloyToKodkod.execute_commandFromBook(rep, world.getAllReachableSigs(), c,
+			A4Solution s = TranslateAlloyToKodkod.execute_command(rep, world.getAllReachableSigs(), c,
 					opt);
 			long finish = System.nanoTime();
 
@@ -181,6 +204,15 @@ public class CLI extends Env {
 
             for (A4Solution sol : instances) {
                 //System.out.println(sol);
+                Object obj = sol.eval(orderByFunc.getBody());
+                A4TupleSet tupSet = (A4TupleSet) obj;
+
+                myAssert(tupSet.size() == 1, "orderBy should return a tuple of size 1");
+
+                final A4Tuple tup = tupSet.iterator().next();
+                final String strScore = tup.atom(0);
+                final int orderScore = Integer.parseInt(strScore);
+                System.out.println(orderScore);
             }
             final int numInstances = instances.size();
             System.out.println("Found " + numInstances + " instances");
