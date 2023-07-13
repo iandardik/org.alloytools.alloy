@@ -79,6 +79,8 @@ import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
  */
 
 public final class SimpleReporter extends A4Reporter {
+    private static ArrayList<A4Solution> globalInstanceQueue = new ArrayList<A4Solution>();
+    private static String globalTempdir = "";
 
     public static final class SimpleCallback1 implements WorkerCallback {
 
@@ -189,6 +191,8 @@ public final class SimpleReporter extends A4Reporter {
                     OurDialog.alert(gui.getFrame(), x);
             }
             if (array[0].equals("declare")) {
+                //System.out.println("doSetLatest 192");
+                //System.err.println("doSetLatest 192");
                 gui.doSetLatest((String) (array[1]));
             }
             if (array[0].equals("S2")) {
@@ -264,6 +268,15 @@ public final class SimpleReporter extends A4Reporter {
                 String filename = (String) (array[3]), formula = (String) (array[4]);
                 results.add(filename);
                 (new File(filename)).deleteOnExit();
+                //System.err.println("doSetLatest 271: " + array[0]);
+                //System.err.println("doSetLatest 271: " + array[1]);
+                //System.err.println("doSetLatest 271: " + array[2]);
+                //System.err.println("doSetLatest 271: " + array[3]);
+                //System.err.println("doSetLatest 271: " + array[4]);
+                //System.out.println("doSetLatest 271");
+                //System.err.println("doSetLatest 271");
+                //gui.doSetLatest((array[1]).toString());
+                //gui.doSetLatest((String) (array[1]));
                 gui.doSetLatest(filename);
                 span.setLength(len3);
                 span.log("   ");
@@ -281,6 +294,8 @@ public final class SimpleReporter extends A4Reporter {
                 String outf = (String) (array[1]);
                 span.setLength(len2);
                 (new File(outf)).deleteOnExit();
+                //System.out.println("doSetLatest 291");
+                //System.err.println("doSetLatest 291");
                 gui.doSetLatest(outf);
                 span.logLink("Metamodel", "XML: " + outf);
                 span.log(" successfully generated.\n\n");
@@ -616,6 +631,16 @@ public final class SimpleReporter extends A4Reporter {
         public void run(WorkerCallback out) throws Exception {
             this.out = out;
             cb("S2", "Enumerating...\n");
+            final String tempXML = globalTempdir + File.separatorChar + "inst.cnf.xml";
+            A4Solution sol = globalInstanceQueue.get(0);
+            sol.writeXML(tempXML);
+            globalInstanceQueue.remove(0);
+            //cb("pop", "XML: " + tempXML + "\n");
+            cb("declare", tempXML);
+
+            /*
+            this.out = out;
+            cb("S2", "Enumerating...\n");
             A4Solution sol;
             Module mod;
             synchronized (SimpleReporter.class) {
@@ -671,6 +696,7 @@ public final class SimpleReporter extends A4Reporter {
                 cb("declare", filename);
                 return;
             }
+            */
         }
     }
 
@@ -692,8 +718,16 @@ public final class SimpleReporter extends A4Reporter {
         public int                bundleIndex;
         public int                resolutionMode;
         public Map<String,String> map;
+        private ArrayList<A4Solution> instanceQueue;
 
-        public SimpleTask1() {}
+        public SimpleTask1() {
+            this.instanceQueue = new ArrayList<A4Solution>();
+        }
+
+        public SimpleTask1(ArrayList<A4Solution> queue) {
+            this.instanceQueue = queue;
+            globalInstanceQueue = queue;
+        }
 
         public void cb(WorkerCallback out, Object... objs) throws IOException {
             out.callback(objs);
@@ -701,6 +735,33 @@ public final class SimpleReporter extends A4Reporter {
 
         @Override
         public void run(WorkerCallback out) throws Exception {
+            System.out.println("instaceQueue sz: " + this.instanceQueue.size());
+            final SimpleReporter rep = new SimpleReporter(out, options.recordKodkod);
+            final Module world = CompUtil.parseEverything_fromFile(rep, map, options.originalFilename, resolutionMode);
+
+            globalTempdir = tempdir;
+            final String outf = tempdir + File.separatorChar + "m.xml";
+            cb(out, "S2", "Generating the metamodel...\n");
+            PrintWriter of = new PrintWriter(outf, "UTF-8");
+            Util.encodeXMLs(of, "\n<alloy builddate=\"", Version.buildDate(), "\">\n\n");
+            final List<Sig> sigs = world.getAllReachableSigs();
+            A4SolutionWriter.writeMetamodel(ConstList.make(sigs), options.originalFilename, of);
+            Util.encodeXMLs(of, "\n</alloy>");
+            Util.close(of);
+            if (AlloyCore.isDebug())
+                validate(outf);
+            cb(out, "metamodel", outf);
+
+            //final String tempXML = tempdir + File.separatorChar + "0.cnf.xml";
+            //final String tempXML = tempdir + File.separatorChar + ".cnf.xml";
+            final String tempXML = tempdir + File.separatorChar + "inst.cnf.xml";
+            A4Solution sol = this.instanceQueue.get(0);
+            sol.writeXML(tempXML);
+            this.instanceQueue.remove(0);
+
+            rep.cb("link", "Instance found. ", "XML: " + tempXML);
+
+            /*
             cb(out, "S2", "Starting the solver...\n\n");
             final SimpleReporter rep = new SimpleReporter(out, options.recordKodkod);
             final Module world = CompUtil.parseEverything_fromFile(rep, map, options.originalFilename, resolutionMode);
@@ -745,8 +806,10 @@ public final class SimpleReporter extends A4Reporter {
                         }
                         if (ai == null)
                             result.add(null);
-                        else if (ai.satisfiable())
+                        else if (ai.satisfiable()) {
                             result.add(tempXML);
+                            System.out.println("tempXML: " + tempXML);
+                        }
                         else if (ai.highLevelCore().a.size() > 0)
                             result.add(tempCNF + ".core");
                         else
@@ -765,6 +828,7 @@ public final class SimpleReporter extends A4Reporter {
                     StringBuilder sb = new StringBuilder();
                     if (result.get(i).endsWith(".xml")) {
                         rep.cb("", "   #" + (i + 1) + ": ");
+                        System.out.println("XML: " + result.get(i));
                         rep.cb("link", r.check ? "Counterexample found. " : "Instance found. ", "XML: " + result.get(i));
                         sb.append(r.label + (r.check ? " is invalid" : " is consistent"));
                         if (r.expects == 0)
@@ -802,6 +866,7 @@ public final class SimpleReporter extends A4Reporter {
             if (exc != null)
                 throw exc;
 
+        */
         }
     }
 }

@@ -42,6 +42,7 @@ import edu.mit.csail.sdg.alloy4.SafeList;
 import edu.mit.csail.sdg.ast.Func;
 import edu.mit.csail.sdg.translator.A4Tuple;
 import edu.mit.csail.sdg.translator.A4TupleSet;
+import edu.mit.csail.sdg.alloy4whole.SimpleGUI;
 import java.util.*;
 
 /**
@@ -235,10 +236,16 @@ public class CLI extends Env {
             }
 
             Arrays.sort(instances);
+            ArrayList<A4Solution> sortedInstances = new ArrayList<A4Solution>();
             for (int i = 0; i < numInstances; ++i) {
                 final Instance inst = instances[i];
-                System.out.println(inst.score);
+                sortedInstances.add(inst.sol);
+                //System.out.println(inst.score);
             }
+
+            //String[] emptyArgs = new String[0];
+            //SimpleGUI.main(emptyArgs, sortedInstances);
+            SimpleGUI.main(sortedInstances);
 		}
 
         /*

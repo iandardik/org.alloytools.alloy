@@ -203,6 +203,8 @@ import kodkod.engine.fol2sat.HigherOrderDeclException;
  */
 public final class SimpleGUI implements ComponentListener, Listener {
 
+    private ArrayList<A4Solution> instanceQueue;
+
     MacUtil macUtil;
 
     /**
@@ -844,7 +846,10 @@ public final class SimpleGUI implements ComponentListener, Listener {
                 try {
                     WorkerEngine.stop();
                 } finally {
-                    System.exit(0);
+                    //System.exit(0);
+                    try {
+                        SimpleGUI.main(this.instanceQueue);
+                    } catch (Exception e) {}
                 }
             }
         return wrapMe();
@@ -1136,7 +1141,7 @@ public final class SimpleGUI implements ComponentListener, Listener {
         if (i >= commands.size())
             i = commands.size() - 1;
         SimpleCallback1 cb = new SimpleCallback1(this, null, log, VerbosityPref.get().ordinal(), latestAlloyVersionName, latestAlloyVersion);
-        SimpleTask1 task = new SimpleTask1();
+        SimpleTask1 task = new SimpleTask1(this.instanceQueue);
         A4Options opt = new A4Options();
         opt.tempDirectory = alloyHome(frame) + fs + "tmp";
         opt.solverDirectory = alloyHome(frame) + fs + "binary";
@@ -1164,10 +1169,12 @@ public final class SimpleGUI implements ComponentListener, Listener {
             int newmem = SubMemory.get(), newstack = SubStack.get();
             if (newmem != subMemoryNow || newstack != subStackNow)
                 WorkerEngine.stop();
-            if (AlloyCore.isDebug() && VerbosityPref.get() == Verbosity.FULLDEBUG)
-                WorkerEngine.runLocally(task, cb);
-            else
-                WorkerEngine.run(task, newmem, newstack, alloyHome(frame) + fs + "binary", "", cb);
+            //idardik: always run locally
+            WorkerEngine.runLocally(task, cb);
+            //if (AlloyCore.isDebug() && VerbosityPref.get() == Verbosity.FULLDEBUG)
+                //WorkerEngine.runLocally(task, cb);
+            //else
+                //WorkerEngine.run(task, newmem, newstack, alloyHome(frame) + fs + "binary", "", cb);
             subMemoryNow = newmem;
             subStackNow = newstack;
         } catch (Throwable ex) {
@@ -1883,6 +1890,16 @@ public final class SimpleGUI implements ComponentListener, Listener {
 
     // ====== Main Method ====================================================//
 
+    public static void main(ArrayList<A4Solution> queue) throws Exception {
+        SwingUtilities.invokeLater(new Runnable() {
+
+            @Override
+            public void run() {
+                String[] emptyArgs = new String[0];
+                new SimpleGUI(emptyArgs, queue);
+            }
+        });
+    }
     /**
      * Main method that launches the program; this method might be called by an
      * arbitrary thread.
@@ -1960,11 +1977,143 @@ public final class SimpleGUI implements ComponentListener, Listener {
     // public void run(WorkerCallback out) { }
     // };
 
+    SimpleGUI(final String[] args, ArrayList<A4Solution> queue) {
+        this.instanceQueue = queue;
+
+        UIManager.put("ToolTip.font", new FontUIResource("Courier New", Font.PLAIN, 14));
+
+        // Enable better look-and-feel
+        if (Util.onMac() || Util.onWindows()) {
+            System.setProperty("com.apple.mrj.application.apple.menu.about.name", "Alloy");
+            System.setProperty("com.apple.mrj.application.growbox.intrudes", "true");
+            System.setProperty("com.apple.mrj.application.live-resize", "true");
+            System.setProperty("com.apple.macos.useScreenMenuBar", "true");
+            System.setProperty("apple.laf.useScreenMenuBar", "true");
+        }
+        if (Util.onMac()) {
+            try {
+                macUtil = new MacUtil();
+                macUtil.addMenus(this);
+            } catch (NoClassDefFoundError e) {
+                // ignore
+            }
+        }
+
+        doLookAndFeel();
+
+        // Figure out the desired x, y, width, and height
+        int screenWidth = OurUtil.getScreenWidth(), screenHeight = OurUtil.getScreenHeight();
+        int width = AnalyzerWidth.get();
+        if (width <= 0)
+            width = screenWidth / 10 * 8;
+        else if (width < 100)
+            width = 100;
+        if (width > screenWidth)
+            width = screenWidth;
+        int height = AnalyzerHeight.get();
+        if (height <= 0)
+            height = screenHeight / 10 * 8;
+        else if (height < 100)
+            height = 100;
+        if (height > screenHeight)
+            height = screenHeight;
+        int x = AnalyzerX.get();
+        if (x < 0)
+            x = screenWidth / 10;
+        if (x > screenWidth - 100)
+            x = screenWidth - 100;
+        int y = AnalyzerY.get();
+        if (y < 0)
+            y = screenHeight / 10;
+        if (y > screenHeight - 100)
+            y = screenHeight - 100;
+
+        // Put up a slash screen
+        final JFrame frame = new JFrame("Alloy Analyzer");
+        frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+        frame.pack();
+        if (!Util.onMac() && !Util.onWindows()) {
+            String gravity = System.getenv("_JAVA_AWT_WM_STATIC_GRAVITY");
+            if (gravity == null || gravity.length() == 0) {
+                // many Window managers do not respect ICCCM2; this should help
+                // avoid the Title Bar being shifted "off screen"
+                if (x < 30) {
+                    if (x < 0)
+                        x = 0;
+                    width = width - (30 - x);
+                    x = 30;
+                }
+                if (y < 30) {
+                    if (y < 0)
+                        y = 0;
+                    height = height - (30 - y);
+                    y = 30;
+                }
+            }
+        }
+        findReplace = new FindReplace(frame, n -> text.selectModulo(n).map(w -> w.getTextPane()), pane -> {
+            text.select(pane);
+        });
+        if (width < 500)
+            width = 500;
+        if (height < 500)
+            height = 500;
+
+        frame.setSize(width, height);
+        frame.setLocation(x, y);
+        frame.setVisible(true);
+        frame.setTitle("Alloy Analyzer " + Version.version() + " loading... please wait...");
+        final int windowWidth = width;
+        // We intentionally call setVisible(true) first before settings the
+        // "please wait" title,
+        // since we want the minimized window title on Linux/FreeBSD to just say
+        // Alloy Analyzer
+
+        // Test the allowed memory sizes
+        // final WorkerEngine.WorkerCallback c = new
+        // WorkerEngine.WorkerCallback() {
+        // private final List<Integer> allowed = new ArrayList<Integer>();
+        // private final List<Integer> toTry = new
+        // ArrayList<Integer>(Arrays.asList(256,512,768,1024,1536,2048,2560,3072,3584,4096));
+        // private int mem;
+        // public synchronized void callback(Object msg) {
+        // if (toTry.size()==0) {
+        // SwingUtilities.invokeLater(new Runnable() {
+        // public void run() { SimpleGUI.this.frame=frame;
+        // SimpleGUI.this.finishInit(args, windowWidth); }
+        // });
+        // return;
+        // }
+        // try { mem=toTry.remove(0); WorkerEngine.stop();
+        // WorkerEngine.run(dummyTask, mem, 128, "", "", this); return; }
+        // catch(IOException ex) { fail(); }
+        // }
+        // public synchronized void done() {
+        // //System.out.println("Alloy4 can use "+mem+"M"); System.out.flush();
+        // allowed.add(mem);
+        // callback(null);
+        // }
+        // public synchronized void fail() {
+        // //System.out.println("Alloy4 cannot use "+mem+"M");
+        // System.out.flush();
+        // callback(null);
+        // }
+        // };
+        // c.callback(null);
+
+        if (Util.onMac()) {
+            frame.getRootPane().putClientProperty("apple.awt.fullscreenable", true);
+        }
+        SimpleGUI.this.frame = frame;
+        finishInit(args, windowWidth);
+    }
+
     /**
      * The constructor; this method will be called by the AWT event thread, using
      * the "invokeLater" method.
      */
     SimpleGUI(final String[] args) {
+        this.instanceQueue = new ArrayList<A4Solution>();
 
         UIManager.put("ToolTip.font", new FontUIResource("Courier New", Font.PLAIN, 14));
 
