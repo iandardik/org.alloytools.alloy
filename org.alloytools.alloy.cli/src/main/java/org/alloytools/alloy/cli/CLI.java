@@ -180,14 +180,17 @@ public class CLI extends Env {
 
         SafeList<Func> funcs = world.getAllFunc();
         Func orderByFunc = null;
+        Func groupByFunc = null;
         for (Func f : funcs) {
             final String label = f.toString();
             if (label.contains("orderBy")) {
                 orderByFunc = f;
-                break;
+            }
+            else if (label.contains("groupBy")) {
+                groupByFunc = f;
             }
         }
-        myAssert(orderByFunc != null, "No orderBy function provided in the spec");
+        myAssert(orderByFunc != null || groupByFunc != null, "orderBy or groupBy function is required in the spec");
         System.out.println("using for orderByFun: " + orderByFunc);
 
 		Map<CommandInfo, A4Solution> answers = new TreeMap<>();
@@ -221,30 +224,53 @@ public class CLI extends Env {
             Instance[] instances = new Instance[numInstances];
             for (int i = 0; i < numInstances; ++i) {
                 final A4Solution sol = solutions.get(i);
+                if (orderByFunc == null) {
+                    Instance inst = new Instance(sol, 0);
+                    instances[i] = inst;
+                }
+                else {
+                    Object obj = sol.eval(orderByFunc.getBody());
+                    A4TupleSet tupSet = (A4TupleSet) obj;
 
-                Object obj = sol.eval(orderByFunc.getBody());
-                A4TupleSet tupSet = (A4TupleSet) obj;
+                    myAssert(tupSet.size() == 1, "orderBy should return a tuple of size 1");
 
-                myAssert(tupSet.size() == 1, "orderBy should return a tuple of size 1");
+                    final A4Tuple tup = tupSet.iterator().next();
+                    final String strScore = tup.atom(0);
+                    final int orderScore = Integer.parseInt(strScore);
 
-                final A4Tuple tup = tupSet.iterator().next();
-                final String strScore = tup.atom(0);
-                final int orderScore = Integer.parseInt(strScore);
-
-                Instance inst = new Instance(sol, orderScore);
-                instances[i] = inst;
+                    Instance inst = new Instance(sol, orderScore);
+                    instances[i] = inst;
+                }
             }
 
-            Arrays.sort(instances);
+            if (orderByFunc != null) {
+                Arrays.sort(instances);
+            }
+
             ArrayList<A4Solution> sortedInstances = new ArrayList<A4Solution>();
+            Set<Integer> groupsSeen = new HashSet<Integer>();
             for (int i = 0; i < numInstances; ++i) {
                 final Instance inst = instances[i];
-                sortedInstances.add(inst.sol);
-                //System.out.println(inst.score);
+                if (groupByFunc == null) {
+                    sortedInstances.add(inst.sol);
+                }
+                else {
+                    final A4Solution sol = inst.sol;
+
+                    Object obj = sol.eval(groupByFunc.getBody());
+                    A4TupleSet tupSet = (A4TupleSet) obj;
+                    myAssert(tupSet.size() == 1, "groupBy should return a tuple of size 1");
+                    final A4Tuple tup = tupSet.iterator().next();
+                    final String strScore = tup.atom(0);
+                    final int groupScore = Integer.parseInt(strScore);
+
+                    if (!groupsSeen.contains(groupScore)) {
+                        sortedInstances.add(inst.sol);
+                    }
+                    groupsSeen.add(groupScore);
+                }
             }
 
-            //String[] emptyArgs = new String[0];
-            //SimpleGUI.main(emptyArgs, sortedInstances);
             SimpleGUI.main(sortedInstances);
 		}
 
